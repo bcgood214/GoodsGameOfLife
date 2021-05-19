@@ -39,7 +39,7 @@ Binary String Index Mappings:
 15-16: herbivore, omnivore, or carnivore
 17-19: vision, with a larger value indicating a greater field of view
 20-24: this is basically intelligence. There will be a tree, the nature of which will depend on this subset of the string.
-51-60: memory capacity
+25-30: memory capacity
 
 
 
