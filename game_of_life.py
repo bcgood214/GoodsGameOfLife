@@ -1,14 +1,22 @@
 import random, inspect, math
 import tkinter as tk
-import primitive_functions as pf
 
 # some globals initialized
 init_geno = ["0"] * 60
 map_width = 1000
 map_height = 800
 map = [None] * map_width
-for x in range(map_width):
-		map[x] = [None] * map_height
+
+## blocks structure was created to map multi-pixel cells to grid
+
+#map = [None] * map_width
+#for x in range(map_width):
+#		map[x] = [None] * map_height
+blocks_width = map_width//4
+blocks_height = map_height//4
+blocks = [None] * blocks_width
+for x in range(blocks_width):
+	blocks[x] = [None] * (blocks_height)
 				
 
 class Node:
@@ -45,7 +53,7 @@ class Node:
 class Brain:
 	
 	
-	def __int__(self, root, body):
+	def __init__(self, root, body):
 		self.root = root
 		self.body = body
 		self.branches = []
@@ -62,7 +70,7 @@ class Individual:
 	def __init__(self, geno, x, y):
 		self.genotype = geno
 		self.memories = []
-		self.brain = Brain(pf.conns["root"], self)
+		self.brain = Brain(conns["root"], self)
 		self.x = x
 		self.y = y
 		self.hunger = 1.0
@@ -78,13 +86,13 @@ class Individual:
 	
 	# checks the genotype to decide if the organism eats plants
 	def eatsplants(self):
-		if self.genotype[26] == "1":
+		if self.genotype[15] == "1":
 			return True
 		return False
 	
 	# checks the genotype to decide if the organism is a herbivore
 	def is_herb(self):
-		if self.genotype[27] == "1":
+		if self.genotype[16] == "1":
 			return True
 		return False
 	
@@ -115,6 +123,27 @@ class Individual:
 	# how much the hunger value increases (i.e. how much hungrier the organism gets) each step
 	def hunger_step(self):
 		self.hunger -= (1-self.stamina)/10
+	
+	# calculate the field of view
+	def get_fov(self):
+		fov_geno = self.genotype[17:20]
+		exp = 0
+		for bit in fov_geno:
+			if bit == "1":
+				exp += 1
+		self.fov = 2**exp
+	
+	# set the memory capacity
+	def memlimit(self):
+		mg = self.genotype[25:]
+		exp = 0
+		for bit in mg:
+			if bit == "1":
+				exp += 1
+		if exp:
+			self.mem_limit = 2**exp
+		else:
+			self.mem_limit = 0
 		
 	
 	
@@ -124,11 +153,11 @@ class Individual:
 conns = {}
 conns['root'] = []
 
-def search(body, brain, children):
+def search(body, brain, children, curmap):
 	# search the surrounding area based on the organism's field of view
 	for x in range(body.x-body.fov, body.x+body.fov):
 		for y in range(body.y-body.fov, body.y+body.fov):
-			if occupied(x, y, map):
+			if occupied(x, y, curmap):
 				for c in children:
 					c.run()
 
@@ -184,13 +213,14 @@ if __name__ == "__main__":
 		for x in range(width):
 			for y in range(height):
 				if occupied(x, y, curmap):
-					canvas.create_rectangle(x, y, x+1, y+1, fill="blue")
+					canvas.create_rectangle(x*4, y*4, (x+1)*4, (y+1)*4, fill="red")
 	
-	map = gen_initpop(100, map_width, map_height, map)
+#	map = gen_initpop(100, map_width, map_height, map)
+	blocks = gen_initpop(100, blocks_width, blocks_height, blocks)
 	root = tk.Tk()
 	can = tk.Canvas(root, bg="white", height=800, width=1000)
 	can.pack()
-	paint_cells(map, can, map_width, map_height)
+	paint_cells(blocks, can, blocks_width, blocks_height)
 #	for x in range(map_width):
 #			for y in range(map_height):
 #				if occupied(x, y, map):
