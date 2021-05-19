@@ -35,10 +35,10 @@ Binary String Index Mappings:
 
 0-11: size (weight)
 12-14: number of cells that the organism can move by in one instance
-15-25: sleeping pattern, with a lower value indicating more frequent sleep, but in shorter bursts
-26-27: herbivore, omnivore, or carnivore
-28-37: vision, with a larger value indicating a greater field of view
-38-50: this is basically intelligence. There will be a tree, the nature of which will depend on this subset of the string.
+-- 15-25: sleeping pattern, with a lower value indicating more frequent sleep, but in shorter bursts
+15-17: herbivore, omnivore, or carnivore
+18-20: vision, with a larger value indicating a greater field of view
+21-25: this is basically intelligence. There will be a tree, the nature of which will depend on this subset of the string.
 51-60: memory capacity
 
 
@@ -61,4 +61,5 @@ Decision Tree:
    * Learning from experience (Reflection)
       * Trying to hunt a prey once, observing the behavior of the prey (like how fast it is, perhaps sleeping patterns, etc.) And remembering that experience
       * If prey was very fast, the organism might reason that it must not have great stamina, so it could attack in a different way next time
-   *
+Additional notes:
+* The “--” at the beginning means that I decided against including it
