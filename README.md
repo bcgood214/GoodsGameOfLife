@@ -36,9 +36,9 @@ Binary String Index Mappings:
 0-11: size (weight)
 12-14: number of cells that the organism can move by in one instance
 -- 15-25: sleeping pattern, with a lower value indicating more frequent sleep, but in shorter bursts
-15-17: herbivore, omnivore, or carnivore
-18-20: vision, with a larger value indicating a greater field of view
-21-25: this is basically intelligence. There will be a tree, the nature of which will depend on this subset of the string.
+15-16: herbivore, omnivore, or carnivore
+17-19: vision, with a larger value indicating a greater field of view
+20-24: this is basically intelligence. There will be a tree, the nature of which will depend on this subset of the string.
 51-60: memory capacity
 
 
