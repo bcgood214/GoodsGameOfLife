@@ -1,12 +1,20 @@
-import random, inspect
+import random, inspect, math
 import tkinter as tk
+import primitive_functions as pf
 
+# some globals initialized
 init_geno = ["0"] * 60
+map_width = 1000
+map_height = 800
+map = [None] * map_width
+for x in range(map_width):
+		map[x] = [None] * map_height
+				
 
 class Node:
 	
 	# Node should contain either a value or a function
-	def __init__(self, func = None, val = None, children = [], parent = None):
+	def __init__(self, func=None, val=None, children=[], parent=None, owner=None, body=None):
 		if func is not None and val is not None:
 			raise "Node passed function and value"
 			
@@ -22,27 +30,42 @@ class Node:
 		
 		self.children = children
 		self.parent = parent
+		
+		# the "body" and "brain" are passed through a pipeline of sorts
+		self.owner = owner
+		self.body = body
 	
-	# if the node contains a function, run it
 	def run(self):
 		if self.func is not None:
-			return self.func()
+			globals[self.func](self.owner, self.body, self.children)
 	
 	def add_child(self, child):
 		self.children.append(child)
 			
 class Brain:
 	
-	def __int__(self, root):
+	
+	def __int__(self, root, body):
 		self.root = root
+		self.body = body
+		self.branches = []
+	
+	# add the basic branches connected to the root
+	def build_base(self):
+		for f in root:
+			self.branches.append(Node(func=f, parent="root"))
+			
 
 class Individual:
 	
 	# initialize the genotype, memories, and brain
-	def __init__(self, brain, geno):
+	def __init__(self, geno, x, y):
 		self.genotype = geno
 		self.memories = []
-		self.brain = brain
+		self.brain = Brain(pf.conns["root"], self)
+		self.x = x
+		self.y = y
+		self.hunger = 1.0
 	
 	def mutation(self):
 		for g in self.genotype:
@@ -53,7 +76,63 @@ class Individual:
 				else:
 					g = "0"
 	
+	# checks the genotype to decide if the organism eats plants
+	def eatsplants(self):
+		if self.genotype[26] == "1":
+			return True
+		return False
 	
+	# checks the genotype to decide if the organism is a herbivore
+	def is_herb(self):
+		if self.genotype[27] == "1":
+			return True
+		return False
+	
+	# calculate the size of an organism
+	def get_size(self):
+		# get the segment of the genotype that determines size
+		wg = self.genotype[:12]
+		
+		# size = 2**n, with n starting at 0 and incremented by 1 for each bit set
+		exp = 0
+		for bit in wg:
+			if bit == "1":
+				exp += 1
+		self.size = 2**wg
+	
+	# calculate the maximum number of cells an organism can move in one step
+	def get_speed(self):
+		sg = self.genotype[12:15]
+		exp = 0
+		for bit in sg:
+			if bit == "1":
+				exp += 1
+		self.max_moves = 2**exp
+	
+	def get_stamina(self):
+		self.stamina = 1/(math.log(self.size)*math.log(self.max_moves))
+	
+	# how much the hunger value increases (i.e. how much hungrier the organism gets) each step
+	def hunger_step(self):
+		self.hunger -= (1-self.stamina)/10
+		
+	
+	
+## beginning of definitions for primitive set
+
+# conns stores which functions can be called by a given function/node
+conns = {}
+conns['root'] = []
+
+def search(body, brain, children):
+	# search the surrounding area based on the organism's field of view
+	for x in range(body.x-body.fov, body.x+body.fov):
+		for y in range(body.y-body.fov, body.y+body.fov):
+			if occupied(x, y, map):
+				for c in children:
+					c.run()
+
+## end of definitions for primitive set
 
 # takes two strings and the probability of crossover
 def sp_crossover(s1, s2, prob):
@@ -96,7 +175,7 @@ def gen_initpop(size, width, height, curmap):
 	#orgmap = []
 	for i in range(size):
 		x, y = findpos(curmap, width, height)
-		curmap[x][y] = Individual(Brain(), init_geno)
+		curmap[x][y] = Individual(init_geno, x, y)
 	return curmap
 	
 if __name__ == "__main__":
@@ -107,11 +186,6 @@ if __name__ == "__main__":
 				if occupied(x, y, curmap):
 					canvas.create_rectangle(x, y, x+1, y+1, fill="blue")
 	
-	map_width = 1000
-	map_height = 800
-	map = [None] * map_width
-	for x in range(map_width):
-		map[x] = [None] * map_height
 	map = gen_initpop(100, map_width, map_height, map)
 	root = tk.Tk()
 	can = tk.Canvas(root, bg="white", height=800, width=1000)
