@@ -43,9 +43,10 @@ class Node:
 		self.owner = owner
 		self.body = body
 	
-	def run(self):
+	# pos is for any other block that is relevant
+	def run(self, pos=None):
 		if self.func is not None:
-			globals[self.func](self.owner, self.body, self.children)
+			globals[self.func](self.owner, self.body, self.children, blocks, pos)
 	
 	def add_child(self, child):
 		self.children.append(child)
@@ -151,15 +152,46 @@ class Individual:
 
 # conns stores which functions can be called by a given function/node
 conns = {}
-conns['root'] = []
+conns['root'] = ['search']
 
-def search(body, brain, children, curmap):
+def search(body, brain, children, curmap, pos=None):
 	# search the surrounding area based on the organism's field of view
 	for x in range(body.x-body.fov, body.x+body.fov):
 		for y in range(body.y-body.fov, body.y+body.fov):
 			if occupied(x, y, curmap):
 				for c in children:
-					c.run()
+					c.run((x, y))
+conns['search'] = [False, 'check_for_prey']
+
+def check_for_prey(body, brain, children, curmap, pos=None):
+	# check to see if an organism has been spotted
+	if pos is not None and blocks[pos[0]][pos[1]] is Individual:
+		for c in children:
+			c.run(pos)
+conns['check_for_prey'] = [False, 'hunt']
+
+def hunt(body, brain, children, curmap, pos=None):
+	prey = curmap[pos[0]][pos[1]]
+	# check if prey is within range to attack
+	if abs(prey.x-body.x) <= body.max_moves and abs(prey.y-body.y) <= body.max_moves:
+		# determine victor in conflict based on size
+		winner = random.choices([0, 1], weights=[prey.size, body.size], k=1)
+		if winner[0]:
+			# if the organism prevails, it will feed off its fallen prey and move to its last position
+			body.feed()
+			body.move(pos[0], pos[1])
+		else:
+			# if the organism fails, it will die
+			curmap[body.x][body.y] = None
+	else:
+		# if there are no children to run, simply find the closes open cell and move there
+		if children == []:
+			nextpos = find_closest_pos(body.x, body.y, prey.x, prey.y, curmap)
+			body.move(pos[0], pos[1])
+		else:
+			for c in children:
+				c.run()
+conns['hunt'] = [True]
 
 ## end of definitions for primitive set
 
