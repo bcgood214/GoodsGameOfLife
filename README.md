@@ -61,5 +61,15 @@ Decision Tree:
    * Learning from experience (Reflection)
       * Trying to hunt a prey once, observing the behavior of the prey (like how fast it is, perhaps sleeping patterns, etc.) And remembering that experience
       * If prey was very fast, the organism might reason that it must not have great stamina, so it could attack in a different way next time
+   * Possible recombination techniques
+      * Possible technique #1
+         * Establish the basic tree that all organism have in common
+         * Initialize miss count to 0
+         * Randomly select one of the nodes
+         * Check if a potential child exists in the parents’ trees
+         * If one potential child exists, insert that as a child and clear miss count
+         * If multiple potential children exist, randomly select one to insert and clear miss count
+         * Otherwise, increment the miss count
+         * End if miss count exceeds limit, otherwise repeat
 Additional notes:
 * The “--” at the beginning means that I decided against including it
