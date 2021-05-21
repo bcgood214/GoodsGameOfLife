@@ -50,6 +50,12 @@ class Node:
 	
 	def add_child(self, child):
 		self.children.append(child)
+	
+	def get_child(self, func):
+		for c in self.children:
+			if c.func == func:
+				return c
+		return None
 			
 class Brain:
 	
@@ -63,6 +69,7 @@ class Brain:
 	def build_base(self):
 		for f in root:
 			self.branches.append(Node(func=f, parent="root"))
+		
 			
 
 class Individual:
@@ -194,6 +201,89 @@ def hunt(body, brain, children, curmap, pos=None):
 conns['hunt'] = [True]
 
 ## end of definitions for primitive set
+
+# search a brain for a specified function
+def search_nodes(nodes, func):
+	# return none if an empty list is passed
+	if nodes == []:
+		return None
+	for node in nodes:
+		if node.func == func:
+			return node
+		else:
+			# search the child, returning the result if it is not None
+			
+			# a non-None value should only be returned if the function was found
+			res = search_brain(node.children, func)
+			if res is not None:
+				return res
+	return None
+
+# check to see if the function passed is contained in any of the nodes
+def check_for_match(func, nodes):
+	for node is nodes:
+		if node.func == func:
+			return True
+	return False
+
+# get all children found among two brains
+def get_options(p1, p2, func):
+	qry1 = search_brain(p1, func)
+	qry2 = search_brain(p2, func)
+			
+	options =  []
+			
+	# options is meant to consist of the children of the node(s) containing
+	# the function passed
+	if qry1 is not None:
+		for node in qry1:
+			options.append(node)
+	if qry2 is not None:
+		for node in qry2:
+			# if the function has not already been included from the first parent,
+			# add it to the list
+			if not check_for_match(node.func, options):
+				options.append(node)
+	
+	return options
+
+# add a node, taking the brain of the child and two parents,
+# along with the genetically defined size limit, as arguments.
+def add_node(cb, pb1, pb2, limit):
+	branches = random.shuffle(cb.branches)
+	for branch in branches:
+		nodes = get_ngroup(branch)
+		nodes = random.shuffle(nodes)
+		for node in nodes:
+			# get the nodes in the parents' brains which are children of the nodes
+			# for the specified function
+			options = get_options(pb1.branches, pb2.branches, node.func)
+			
+			if len(options) > 0:
+				# add a child to the node in the child's brain by randomly
+				# selecting from the options
+				choice = random.choices(options, k=1)[0]
+				node.add_child(choice)
+				# if the newly added node contains a non-terminal function,
+				# build out the branch using the parents' nodes until a terminal
+				# is reached
+				if not conns[choice][0]:
+					terminal = False
+					while not terminal:
+						options = get_options(pb1.branches, pb2.branches, choice)
+						node = node.get_child(choice.func)
+						choice = random.choices(options, k=1)[0]
+						node.add_child(choice)
+						if conns[choice][0] == True:
+							terminal = True
+
+# get a group of nodes in an organism's tree
+def get_ngroup(node, group=[]):
+	group.append(branch)
+	for c in node.children:
+		get_ngroup(branch, group)
+	return group
+		
 
 # takes two strings and the probability of crossover
 def sp_crossover(s1, s2, prob):
