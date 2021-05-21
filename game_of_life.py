@@ -69,6 +69,28 @@ class Brain:
 	def build_base(self):
 		for f in root:
 			self.branches.append(Node(func=f, parent="root"))
+	
+	def mutate(self, mutrate, nodes=self.branches):
+		# return if an empty list is passed
+		if not nodes:
+			return
+		mutated = False
+		for node in random.shuffle(nodes):
+			val = random.random()
+			if val < mutrate:
+				mutated = True
+				# select a random element in the list possible connections,
+				# excluding the first element, which is a bool
+				mutfunc = random.choice(conns[node.func][1:])
+				# check if the function is already in a child node and return if it is
+				if check_for_match(mutfunc, node.children):
+					return
+				else:
+					node.add_child(Node(func=mutfunc, parent=node, owner=self, body=self.body))
+		if not mutated:
+			# if no mutation occurred, try a the children of a randomly selected node in the list
+			self.mutate(mutrate, nodes=random.choice(nodes).children)
+			# if a node with no children is passed, it should just return with mutation ever happening
 		
 			
 
