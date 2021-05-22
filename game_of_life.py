@@ -2,10 +2,12 @@ import random, inspect, math
 import tkinter as tk
 
 # some globals initialized
-init_geno = ["0"] * 60
+init_geno = ["0"] * 30
 map_width = 1000
 map_height = 800
 map = [None] * map_width
+# orgs contains all of the living individuals
+# possibility for orgs: store the organisms as x, y coordinates
 
 ## blocks structure was created to map multi-pixel cells to grid
 
@@ -18,6 +20,8 @@ blocks = [None] * blocks_width
 for x in range(blocks_width):
 	blocks[x] = [None] * (blocks_height)
 				
+# idea: create a structure to quickly find all organisms based on
+# block coordinates
 
 class Node:
 	
@@ -49,7 +53,22 @@ class Node:
 			globals[self.func](self.owner, self.body, self.children, blocks, pos)
 	
 	def add_child(self, child):
-		self.children.append(child)
+		#self.children.append(child)
+		#self.check_for_dups(self, child, self.children)
+		self.children.append()
+	
+	# paths that lead to a node with the same function as the terminal of the child's path
+	# should be removed
+#	def check_for_dups(self, node, branch):
+#		if not node.children:
+#			if check_for_match(node, branch):
+#				for c in branch:
+#					if c.func == node.func:
+#						branch.remove(c)
+#					break
+#		else:
+#			for child in node.children:
+#				self.check_for_dups(child, branch)
 	
 	def get_child(self, func):
 		for c in self.children:
@@ -91,6 +110,11 @@ class Brain:
 			# if no mutation occurred, try a the children of a randomly selected node in the list
 			self.mutate(mutrate, nodes=random.choice(nodes).children)
 			# if a node with no children is passed, it should just return with mutation ever happening
+	
+	# engage in the thinking process by calling run on all of the root nodes for the different main branches
+	def think(self):
+		for branch in self.branches:
+			branch.run()
 		
 			
 
@@ -174,8 +198,31 @@ class Individual:
 			self.mem_limit = 2**exp
 		else:
 			self.mem_limit = 0
-		
 	
+	# replenish hunger value
+	def feed(self):
+		self.hunger = 1.0
+	
+	def move(self, x, y):
+		# set previous position on the map to None and new position to the instance of the individual
+		blocks[self.x][self.y] = None
+		blocks[x][y] = self
+		# update coordinates
+		self.x = x
+		self.y = y
+		
+		
+
+# mainly for selecting the child node to run	
+def choose_node(nodes, pos=None):
+	# choose a child to run stochastically, with the children weighted by position in the list
+	# more recent additions should be towards the end and are more likely to be chosen
+	choice = random.choices(nodes, [i*i+1 for i in range(len(nodes))], k=1)[0]
+	choice.run(pos)
+
+def find_closest_pos(x1, y1, x2, y2, curmap):
+	# TODO
+	pass
 	
 ## beginning of definitions for primitive set
 
@@ -188,15 +235,39 @@ def search(body, brain, children, curmap, pos=None):
 	for x in range(body.x-body.fov, body.x+body.fov):
 		for y in range(body.y-body.fov, body.y+body.fov):
 			if occupied(x, y, curmap):
-				for c in children:
-					c.run((x, y))
+				choose_node(children, (x, y))
+
 conns['search'] = [False, 'check_for_prey']
+
+# get the number of bits that are different between two binary strings
+def comp_geno(ind1, ind2):
+	count = 0
+	for bit in range(len(ind1.genotype)):
+		if ind1[bit] != ind2[bit]:
+			count += 1
+	return count
+		
+
+def check_for_mate(body, brain, children, curmap, pos=None):
+	if pos is not None and blocks[pos[0]][pos[1]] is Individual:
+		potmate = block[pos[0]][pos[1]]
+		# check if the other organism is a member of the same "species"
+		if comp_geno(body, potmate) < 4:
+			choose_node(children, (x, y))
+
+conns['check_for_mate'] = [False, 'prop_mate']
+
+def prop_mate(body, brain, children, curmap, pos=None):
+	mate = blocks[pos[0]][pos[1]]
+	mating_interaction(body, mate)
+
+conns['prop_mate'] = [True]
 
 def check_for_prey(body, brain, children, curmap, pos=None):
 	# check to see if an organism has been spotted
 	if pos is not None and blocks[pos[0]][pos[1]] is Individual:
-		for c in children:
-			c.run(pos)
+		choose_node(children, (x, y))
+
 conns['check_for_prey'] = [False, 'hunt']
 
 def hunt(body, brain, children, curmap, pos=None):
@@ -207,19 +278,21 @@ def hunt(body, brain, children, curmap, pos=None):
 		winner = random.choices([0, 1], weights=[prey.size, body.size], k=1)
 		if winner[0]:
 			# if the organism prevails, it will feed off its fallen prey and move to its last position
+			#orgs[pos[0]].remove[pos[1]]
 			body.feed()
 			body.move(pos[0], pos[1])
 		else:
 			# if the organism fails, it will die
 			curmap[body.x][body.y] = None
+			#orgs[body.x].remove(body.y)
 	else:
-		# if there are no children to run, simply find the closes open cell and move there
+		# if there are no children to run, simply find the closest open cell and move there
 		if children == []:
 			nextpos = find_closest_pos(body.x, body.y, prey.x, prey.y, curmap)
 			body.move(pos[0], pos[1])
 		else:
-			for c in children:
-				c.run()
+			choose_node(children, (x, y))
+
 conns['hunt'] = [True]
 
 ## end of definitions for primitive set
@@ -349,7 +422,14 @@ def gen_initpop(size, width, height, curmap):
 	for i in range(size):
 		x, y = findpos(curmap, width, height)
 		curmap[x][y] = Individual(init_geno, x, y)
+		#orgs[x].append(y)
 	return curmap
+
+# traverse the list of living organism, engaging in thought for each
+#def orgloop():
+#	for org in orgs:
+#		for ind in org:
+#			ind.think()
 	
 if __name__ == "__main__":
 
@@ -364,10 +444,12 @@ if __name__ == "__main__":
 	root = tk.Tk()
 	can = tk.Canvas(root, bg="white", height=800, width=1000)
 	can.pack()
-	paint_cells(blocks, can, blocks_width, blocks_height)
+	for i in range(1000):
+		paint_cells(blocks, can, blocks_width, blocks_height)
+		root.mainloop()
+		#orgloop()
 #	for x in range(map_width):
 #			for y in range(map_height):
 #				if occupied(x, y, map):
 #					print("occupied")
 #					can.create_rectangle(x, y, x+4, y+4, fill="red")
-	root.mainloop()
