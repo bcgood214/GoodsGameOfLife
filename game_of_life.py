@@ -23,10 +23,15 @@ for x in range(blocks_width):
 # idea: create a structure to quickly find all organisms based on
 # block coordinates
 
+# store x coordinates as keys, y coordinates as items in a list
+# store coordinates for the current and next generation in seperate dicts
+curcoords = {}
+nextcoords = {}
+
 class Node:
 	
 	# Node should contain either a value or a function
-	def __init__(self, func=None, val=None, children=[], parent=None, owner=None, body=None):
+	def __init__(self, func=None, val=None, children=[], parent=None, brain=None, body=None):
 		if func is not None and val is not None:
 			raise "Node passed function and value"
 			
@@ -44,13 +49,13 @@ class Node:
 		self.parent = parent
 		
 		# the "body" and "brain" are passed through a pipeline of sorts
-		self.owner = owner
+		self.brain = brain
 		self.body = body
 	
 	# pos is for any other block that is relevant
 	def run(self, pos=None):
 		if self.func is not None:
-			globals[self.func](self.owner, self.body, self.children, blocks, pos)
+			globals[self.func](self.brain, self.body, self.children, blocks, pos)
 	
 	def add_child(self, child):
 		#self.children.append(child)
@@ -83,13 +88,16 @@ class Brain:
 		self.root = root
 		self.body = body
 		self.branches = []
+		# list for prioritizing what to search for
+		self.priorities = ['check_for_prey', 'check_for_mate']
+		self.memories = []
 	
 	# add the basic branches connected to the root
 	def build_base(self):
 		for f in root:
 			self.branches.append(Node(func=f, parent="root"))
 	
-	def mutate(self, mutrate, nodes=self.branches):
+	def mutate(self, mutrate, nodes):
 		# return if an empty list is passed
 		if not nodes:
 			return
@@ -123,7 +131,6 @@ class Individual:
 	# initialize the genotype, memories, and brain
 	def __init__(self, geno, x, y):
 		self.genotype = geno
-		self.memories = []
 		self.brain = Brain(conns["root"], self)
 		self.x = x
 		self.y = y
@@ -217,27 +224,186 @@ class Individual:
 def choose_node(nodes, pos=None):
 	# choose a child to run stochastically, with the children weighted by position in the list
 	# more recent additions should be towards the end and are more likely to be chosen
+	if nodes is None:
+		return None
 	choice = random.choices(nodes, [i*i+1 for i in range(len(nodes))], k=1)[0]
 	choice.run(pos)
 
-def find_closest_pos(x1, y1, x2, y2, curmap):
-	# TODO
-	pass
+# idea: check if coordinates are closer to target before setting variables in loop
+def get_coords(xcap, ycap, x1, y1, xmod, ymod, curmap):
+	curx = x1
+	cury = y1
+	for x in range(xcap):
+		for y in range(ycap):
+			if not occupied(x1+(x*xmod), y1+(y*ymod), curmap):
+				curx = x1+(x*xmod)
+				cury = y1+(y*ymod)
+	return [curx, cury]
+
+# returns just an x or y coordinate instead of both
+def get_coord(cap, val, other, x, mod, curmap):
+	cur = val
+	for v in range(cap):
+		if x:
+			if not occupied(val+(v*mod), other, curmap):
+				cur = val+(v*mod)
+		else:
+			if not occupied(other, val+(v*mod), curmap):
+				cur = val+(v*mod)
+	
+	return cur
+
+# for shifting an organism's coordinates from the current gen to the next
+# if the organism died, this function should work if only one pair of coordinates is passed
+def gen_change(x1, y1, x2=None, y2=None):
+	curcoords[x1].remove(y1)
+	if x2 is not None and y2 is not None:
+		if x2 in nextcoords:
+			nextcoords.append(y2)
+		else:
+			nextcoords[x2] = y2
+
+def find_closest_pos(limit, x1, y1, x2, y2, curmap):
+	curx = x1
+	cury = y1
+	
+	xdiff = x2 - x1
+	ydiff = y2 - y1
+	
+	# the region to look at will either be the limit,
+	# or the absolute value of the difference if the second
+	# position is within the limit for either the x or y coordinate
+	xcap = limit if limit <= abs(xdiff) else abs(xdiff)
+	ycap = limit if limit <= abs(ydiff) else abs(ydiff)
+	
+	coords = None
+	if xdiff > 0 and ydiff > 0:
+		coords = get_coords(xcap, ycap, x1, y1, 1, 1, curmap)
+	elif xdiff > 0 and ydiff < 0:
+		coords = get_coords(xcap, ycap, x1, y1, 1, -1, curmap)
+	elif xdiff < 0 and ydiff > 0:
+		coords = get_coords(xcap, ycap, x1, y1, -1, 1, curmap)
+	elif xdiff < 0 and ydiff < 0:
+		coords = get_coords(xcap, ycap, x1, y1, -1, -1, curmap)
+	elif xdiff > 0 and ydiff == 0:
+		coords = []
+		coords = get_coord(xcap, x1, y1, True, 1, curmap)
+		coords.append(cury)
+	elif xdiff < 0 and ydiff == 0:
+		coords = []
+		coords = get_coord(xcap, x1, y1, True, -1, curmap)
+		coords.append(cury)
+	elif ydiff > 0 and xdiff == 0:
+		coords = []
+		coords.append(curx)
+		coords.append(get_coord(ycap, y1, x1, False, 1, curmap))
+	elif ydiff < 0 and xdiff == 0:
+		coords = []
+		coords.append(curx)
+		coords.append(get_coord(ycap, y1, x1, False, -1, curmap))
+	
+	return coords
+
+#def find_closest_pos(limit, x1, y1, x2, y2, curmap):
+#	# TODO
+#	curx = x1
+#	cury = y1
+	
+#	xdiff = x2 - x1
+#	ydiff = y2 - y1
+	
+#	# the region to look at will either be the limit,
+#	# or the absolute value of the difference if the second
+#	# position is within the limit for either the x or y coordinate
+#	xcap = limit if limit <= abs(xdiff) else abs(xdiff)
+#	ycap = limit if limit <= abs(ydiff) else abs(ydiff)
+	
+#	# search for an open position based on the ceiling that was just defined,
+#	# with the region either beng ahead of or past the current location based on
+#	# whether the second x/y value is greater or less than the first corresponding
+#	# value passed to the function
+#	if xdiff > 0:
+#		if ydiff > 0:
+#			for x in range(xcap):
+#				for y in range(ycap):
+#					if not occupied(x1+x, y1+y):
+#						curx = x1+x
+#						cury = y1+y
+#		elif ydiff < 0:
+#			for x in range(xcap):
+#				for y in range(ycap):
+#					if not occupied(x1+x, y1-y):
+#						curx = x1+x
+#						cury = y1-y
+#		else:
+#			for x in range(xcap)
+						
+#		for x in range(xcap):
+#			# check to see if the specified cell is not occupied, and update the x
+#			# coordinates returned by the function accordingly
+#			if not occupied(x1+x, cury, curmap):
+#				curx = x1+x
+#	elif xdiff < 0:
+#		if ydiff > 0:
+#			for x in range(xcap):
+#				for y in range(ycap):
+#					if not occupied(x1-x, y1+y):
+#						curx = x1-x
+#						cury = y1+y
+#		elif ydiff < 0:
+#			for x in range(xcap):
+#				for y in range(ycap):
+#					if not occupied(x1-x, y1-y):
+#						curx = x1-x
+#						cury = y1-y
+						
+#		for x in range(xcap):
+#			if not occupied(x1-x, cury, curmap):
+#				curx = x1-x
+	
+#	if ydiff > 0:
+#		for y in range(ycap):
+#			if not occupied(curx, y1+y, curmap):
+#				cury = y1+y
+#	elif ydiff < 0:
+#		for y in range(ycap):
+#			if not occupied(curx, y1-y, curmap):
+#				cury = y1-y
+	
+#	return [curx, cury]
 	
 ## beginning of definitions for primitive set
 
 # conns stores which functions can be called by a given function/node
 conns = {}
-conns['root'] = ['search']
+conns['root'] = ['prioritize', 'search']
 
+# set the priorities list
+def prioritize(body, brain, children, curmap, pos=None):
+	# call a child, or go off default conditions if there are no children
+	if choose_node(children, pos) is None:
+		if body.hunger < 2.0:
+			brain.priorites[0] = 'check_for_prey'
+			brain.priorities[1] = 'check_for_mate'
+		else:
+			brain.priorities[0] = 'check_for_mate'
+			brain.priorities[1] = 'check_for_prey'
+
+conns['prioritize'] = [True]
+
+# search will call all of its children,
+# as checking for different things can server different purposes
 def search(body, brain, children, curmap, pos=None):
 	# search the surrounding area based on the organism's field of view
 	for x in range(body.x-body.fov, body.x+body.fov):
 		for y in range(body.y-body.fov, body.y+body.fov):
 			if occupied(x, y, curmap):
-				choose_node(children, (x, y))
+				for p in brain.priorities:
+					if p.run():
+						# exit the loop if something was found
+						break
 
-conns['search'] = [False, 'check_for_prey']
+conns['search'] = [False, 'check_for_prey', 'check_for_mate']
 
 # get the number of bits that are different between two binary strings
 def comp_geno(ind1, ind2):
@@ -254,6 +420,9 @@ def check_for_mate(body, brain, children, curmap, pos=None):
 		# check if the other organism is a member of the same "species"
 		if comp_geno(body, potmate) < 4:
 			choose_node(children, (x, y))
+			return True
+	
+	return False
 
 conns['check_for_mate'] = [False, 'prop_mate']
 
@@ -267,6 +436,9 @@ def check_for_prey(body, brain, children, curmap, pos=None):
 	# check to see if an organism has been spotted
 	if pos is not None and blocks[pos[0]][pos[1]] is Individual:
 		choose_node(children, (x, y))
+		return True
+	
+	return False
 
 conns['check_for_prey'] = [False, 'hunt']
 
@@ -288,8 +460,9 @@ def hunt(body, brain, children, curmap, pos=None):
 	else:
 		# if there are no children to run, simply find the closest open cell and move there
 		if children == []:
-			nextpos = find_closest_pos(body.x, body.y, prey.x, prey.y, curmap)
-			body.move(pos[0], pos[1])
+			nextpos = find_closest_pos(body.max_moves, body.x, body.y, prey.x, prey.y, curmap)
+			#body.move(pos[0], pos[1])
+			body.move(nextpos[0], nextpos[1])
 		else:
 			choose_node(children, (x, y))
 
@@ -316,7 +489,7 @@ def search_nodes(nodes, func):
 
 # check to see if the function passed is contained in any of the nodes
 def check_for_match(func, nodes):
-	for node is nodes:
+	for node in nodes:
 		if node.func == func:
 			return True
 	return False
@@ -423,13 +596,17 @@ def gen_initpop(size, width, height, curmap):
 		x, y = findpos(curmap, width, height)
 		curmap[x][y] = Individual(init_geno, x, y)
 		#orgs[x].append(y)
+		if x in curcoords:
+			curcoords[x].append(y)
+		else:
+			curcoords[x] = [y]
 	return curmap
 
 # traverse the list of living organism, engaging in thought for each
-#def orgloop():
-#	for org in orgs:
-#		for ind in org:
-#			ind.think()
+def orgloop(curmap):
+	for org in curcoords:
+		for ind in curcoords[org]:
+			curmap[org][ind].brain.think()
 	
 if __name__ == "__main__":
 
@@ -438,6 +615,8 @@ if __name__ == "__main__":
 			for y in range(height):
 				if occupied(x, y, curmap):
 					canvas.create_rectangle(x*4, y*4, (x+1)*4, (y+1)*4, fill="red")
+		
+				
 	
 #	map = gen_initpop(100, map_width, map_height, map)
 	blocks = gen_initpop(100, blocks_width, blocks_height, blocks)
@@ -445,9 +624,10 @@ if __name__ == "__main__":
 	can = tk.Canvas(root, bg="white", height=800, width=1000)
 	can.pack()
 	for i in range(1000):
+		can.delete("all")
 		paint_cells(blocks, can, blocks_width, blocks_height)
 		root.mainloop()
-		#orgloop()
+		orgloop(blocks)
 #	for x in range(map_width):
 #			for y in range(map_height):
 #				if occupied(x, y, map):
