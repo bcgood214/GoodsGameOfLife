@@ -28,6 +28,16 @@ for x in range(blocks_width):
 curcoords = {}
 nextcoords = {}
 
+# check if point lies beyond bounds
+def check_bounds(x, y):
+	# split up the conditions for readability
+	if x >= blocks_width or y >= blocks_height:
+		return False
+	elif x < 0 or y < 0:
+		return False
+	
+	return True
+
 class Node:
 	
 	# Node should contain either a value or a function
@@ -52,7 +62,7 @@ class Node:
 		self.brain = brain
 		self.body = body
 	
-	# pos is for any other block that is relevant
+	# pos is for any other blocks that are relevant
 	def run(self, pos=None):
 		if self.func is not None:
 			globals[self.func](self.brain, self.body, self.children, blocks, pos)
@@ -101,6 +111,10 @@ class Brain:
 	def build_base(self):
 		for f in root:
 			self.branches.append(Node(func=f, parent="root"))
+		for branch in self.branches:
+			if branch.func == 'search':
+				for child in conns['search'][1:]:
+					branch.add_child(Node(func=child, parent=branch))
 	
 	def mutate(self, mutrate, nodes):
 		# return if an empty list is passed
@@ -198,6 +212,16 @@ class Individual:
 			if bit == "1":
 				exp += 1
 		self.fov = 2**exp
+		
+	# get the "intellect" (number of node addition procedures)
+	def get_intellect(self):
+		int_geno = self.genotype[20:25]
+		exp = 0
+		for bit in int_geno:
+			if bit == "1":
+				exp += 1
+		
+		self.intellect = 2**exp
 	
 	# set the memory capacity
 	def memlimit(self):
@@ -309,7 +333,26 @@ def find_closest_pos(limit, x1, y1, x2, y2, curmap):
 	
 	return coords
 
-find_child(children, func):
+# find open cell for new individual
+def find_birthing_cell(x, y, curmap, val=1):
+	if not check_bounds(x, y):
+		return None
+	if not occupied(x+val, y+val, curmap):
+		if check_bounds(x+val, y+val):
+			return [x+val, y+val]
+	elif not occupied(x-val, y+val, curmap):
+		if check_bounds(x-val, y+val):
+			return [x-val, y+val]
+	elif not occupied(x+val, y-val, curmap):
+		if check_bounds(x+val, y-val):
+			return [x+val, y-val]
+	elif not occupied(x-val, y-val, curmap):
+		if check_bounds(x-val, y-val):
+			return [x-val, y-val]
+	else:
+		return find_birthing_cell(x, y, curmap, val+1)
+
+def find_child(children, func):
 	for c in children:
 		if c.func == func:
 			return c
@@ -338,12 +381,46 @@ conns['prioritize'] = [True]
 # see if any broadcasts/interactions came in and handle them appropriately
 def check_interactions(body, brain, children, curmap, pos=None):
 	for bc in brain.interactions:
-		if bc == 1:
-			find_child(children, 'mate_selection').choose_node(children, pos)
+		if bc[0] == 1:
+			# get the right child node and pass it to choose
+			node = find_child(children, 'mate_selection')
+			choose_node(node.children, pos=[bc[1], bc[2]])
+			
 conns['check_interactions'] = [False, 'mate_selection']
 
+def mate_selection(body, brain, children, curmap, pos=None):
+	pass
+
+conns['mate_selection'] = [False, 'eval_size']
+
+def eval_size(body, brain, children, curmap, pos=None):
+	potmate = curmap[pos[0]][pos[1]]
+	if potmate.size > body.size:
+		# find the closest open spot to "Mom"
+		birthpos = find_birthing_cell(body.x, body.y, curmap)
+		choose_node(children, pos=[birthpos[0], birthpos[1], pos[0], pos[1]])
+		
+		
+conns['eval_size'] = [False, 'reproduce']
+
+def reproduce(body, brain, children, curmap, pos=None):
+	mate = curmap[pos[2]][pos[3]]
+	geno = sp_crossover(body.genotype, mate.genotype)
+	ind = Individual(geno, pos[0], pos[1])
+	curmap[pos[0]][pos[1]] = ind
+	for i in ind.get_intellect():
+		add_node(ind.brain, brain, mate.brain)
+	ind.mutation()
+	if nextcoords[pos[0]] is None:
+		nextcoords[pos[0]] = [pos[1]]
+	else:
+		nextcoords[pos[0]].append(pos[1])
+
+conns['reproduce'] = [True]
+	
+
 # search will call all of its children,
-# as checking for different things can server different purposes
+# as checking for different things can serve different purposes
 def search(body, brain, children, curmap, pos=None):
 	# search the surrounding area based on the organism's field of view
 	for x in range(body.x-body.fov, body.x+body.fov):
@@ -356,6 +433,7 @@ def search(body, brain, children, curmap, pos=None):
 
 conns['search'] = [False, 'check_for_prey', 'check_for_mate']
 
+# Helper
 # get the number of bits that are different between two binary strings
 def comp_geno(ind1, ind2):
 	count = 0
@@ -370,7 +448,7 @@ def check_for_mate(body, brain, children, curmap, pos=None):
 		potmate = block[pos[0]][pos[1]]
 		# check if the other organism is a member of the same "species"
 		if comp_geno(body, potmate) < 4:
-			choose_node(children, (x, y))
+			choose_node(children, [x, y])
 			return True
 	
 	return False
@@ -380,14 +458,14 @@ conns['check_for_mate'] = [False, 'prop_mate']
 def prop_mate(body, brain, children, curmap, pos=None):
 	mate = blocks[pos[0]][pos[1]]
 	# 1 is the code for a sexual proposition
-	mate.interactions.append(1)
+	mate.interactions.append([1, body.x, body.y])
 
 conns['prop_mate'] = [True]
 
 def check_for_prey(body, brain, children, curmap, pos=None):
 	# check to see if an organism has been spotted
 	if pos is not None and blocks[pos[0]][pos[1]] is Individual:
-		choose_node(children, (x, y))
+		choose_node(children, [x, y])
 		return True
 	
 	return False
@@ -416,7 +494,7 @@ def hunt(body, brain, children, curmap, pos=None):
 			#body.move(pos[0], pos[1])
 			body.move(nextpos[0], nextpos[1])
 		else:
-			choose_node(children, (x, y))
+			choose_node(children, [x, y])
 
 conns['hunt'] = [True]
 
@@ -467,9 +545,8 @@ def get_options(p1, p2, func):
 	
 	return options
 
-# add a node, taking the brain of the child and two parents,
-# along with the genetically defined size limit, as arguments.
-def add_node(cb, pb1, pb2, limit):
+# add a node, taking the brain of the child and two parents as arguments.
+def add_node(cb, pb1, pb2):
 	branches = random.shuffle(cb.branches)
 	for branch in branches:
 		nodes = get_ngroup(branch)
@@ -483,7 +560,7 @@ def add_node(cb, pb1, pb2, limit):
 				# add a child to the node in the child's brain by randomly
 				# selecting from the options
 				choice = random.choices(options, k=1)[0]
-				node.add_child(choice)
+				node.add_child(choice, parent=node, brain=cb)
 				# if the newly added node contains a non-terminal function,
 				# build out the branch using the parents' nodes until a terminal
 				# is reached
@@ -493,7 +570,7 @@ def add_node(cb, pb1, pb2, limit):
 						options = get_options(pb1.branches, pb2.branches, choice)
 						node = node.get_child(choice.func)
 						choice = random.choices(options, k=1)[0]
-						node.add_child(choice)
+						node.add_child(choice, parent=node, brain=cb)
 						if conns[choice][0] == True:
 							terminal = True
 
@@ -511,6 +588,7 @@ def sp_crossover(s1, s2, prob):
 		point = random.randint(1, len(s1) - 1)
 		child = s1[0:point] + s2[point:]
 		return child
+	return random.choice([s1, s2])
 
 #def mutation(geno):
 #	for g in geno:
