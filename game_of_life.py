@@ -423,13 +423,22 @@ conns['reproduce'] = [True]
 # as checking for different things can serve different purposes
 def search(body, brain, children, curmap, pos=None):
 	# search the surrounding area based on the organism's field of view
+	open_spot = None
+	found = False
 	for x in range(body.x-body.fov, body.x+body.fov):
 		for y in range(body.y-body.fov, body.y+body.fov):
 			if occupied(x, y, curmap):
 				for p in brain.priorities:
-					if p.run():
+					res = search_nodes(children, p)
+					if res is not None:
 						# exit the loop if something was found
+						res.run()
+						found = True
 						break
+			else:
+				open_spot = [x, y]
+	if not found:
+		body.move(open_spot[0], open_spot[1])
 
 conns['search'] = [False, 'check_for_prey', 'check_for_mate']
 
